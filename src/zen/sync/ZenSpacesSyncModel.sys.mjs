@@ -628,6 +628,7 @@ class nsZenSpacesSyncModel {
           containerGuid: this.guidForContextId(space.containerTabId, {
             create: true,
           }),
+          containerRevision: space.containerRevision ?? 0,
           children: this.#childSequence(ctx, { space: uuid }),
         },
       });

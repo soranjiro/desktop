@@ -180,6 +180,7 @@ class nsZenWorkspaces {
         for (const workspace of this.getWorkspaces()) {
           if (workspace.containerTabId === userContextId) {
             workspace.containerTabId = 0;
+            workspace.containerRevision = (workspace.containerRevision ?? 0) + 1;
             this.saveWorkspace(workspace);
           }
         }
@@ -3200,8 +3201,11 @@ class nsZenWorkspaces {
     let userContextId = parseInt(
       event.target.getAttribute("data-usercontextid")
     );
-    workspace.containerTabId = userContextId + 0; // +0 to convert to number
-    this.saveWorkspace(workspace);
+    if (workspace.containerTabId !== userContextId) {
+      workspace.containerTabId = userContextId;
+      workspace.containerRevision = (workspace.containerRevision ?? 0) + 1;
+      this.saveWorkspace(workspace);
+    }
   }
 
   async closeAllUnpinnedTabs() {
