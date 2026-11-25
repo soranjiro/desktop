@@ -322,17 +322,40 @@ class nsZenSpacesSyncApplier {
         if (!data.uuid) {
           continue;
         }
+        const index = list.findIndex(s => s.uuid === data.uuid);
+        const current = index === -1 ? null : list[index];
+        const localRevision = current?.containerRevision ?? 0;
+        const remoteRevision =
+          Number.isSafeInteger(data.containerRevision) &&
+          data.containerRevision >= 0
+            ? data.containerRevision
+            : 0;
+        // A space record also carries child ordering. Its upload time is
+        // therefore not necessarily the time the container was changed.
+        // Compare only assignment revisions; resolve concurrent edits
+        // deterministically using synced GUIDs, never local numeric IDs.
+        // Revision zero retains the legacy behavior for unmigrated spaces.
+        const acceptContainer =
+          !current ||
+          remoteRevision > localRevision ||
+          (remoteRevision === localRevision &&
+            (remoteRevision === 0 ||
+              (data.containerGuid || "") >=
+                (ZenSpacesSyncModel.guidForContextId(current.containerTabId, {
+                  create: true,
+                }) || "")));
         const fields = {
           uuid: data.uuid,
           name: data.name ?? "",
           icon: data.icon ?? undefined,
           theme: data.theme ?? null,
-          containerTabId: this.#resolveContainerId(data.containerGuid),
+          containerTabId: acceptContainer
+            ? this.#resolveContainerId(data.containerGuid)
+            : current.containerTabId ?? 0,
+          containerRevision: acceptContainer ? remoteRevision : localRevision,
         };
         // A space record re-syncs whenever its child ordering changes, so
         // only propagate (and especially repaint) when its own fields did.
-        const index = list.findIndex(s => s.uuid === data.uuid);
-        const current = index === -1 ? null : list[index];
         const visualChanged =
           !current ||
           (current.name ?? "") !== fields.name ||
@@ -341,6 +364,7 @@ class nsZenSpacesSyncApplier {
             canonicalJSON(fields.theme ?? null);
         const containerChanged =
           !current || (current.containerTabId ?? 0) !== fields.containerTabId;
+        const revisionChanged = localRevision !== fields.containerRevision;
         if (containerChanged) {
           syncLog(
             `space ${data.uuid} containerTabId ` +
@@ -351,7 +375,7 @@ class nsZenSpacesSyncApplier {
         if (!current) {
           list.push(fields);
           changed = true;
-        } else if (visualChanged || containerChanged) {
+        } else if (visualChanged || containerChanged || revisionChanged) {
           list[index] = { ...current, ...fields };
           changed = true;
         }
